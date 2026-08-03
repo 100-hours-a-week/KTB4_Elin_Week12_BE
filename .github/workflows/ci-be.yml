@@ -60,7 +60,6 @@ jobs:
             --tag ${{ secrets.DOCKER_USERNAME }}/community-backend:latest \
             --tag ${{ secrets.DOCKER_USERNAME }}/community-backend:${{ github.sha }} \
             .
-
       - name: Push backend Docker image
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/community-backend:latest
