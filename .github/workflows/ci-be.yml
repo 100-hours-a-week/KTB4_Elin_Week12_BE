@@ -1,4 +1,4 @@
-name: Backend CI/CD
+name: Backend Blue/Green CI/CD
 
 on:
   push:
@@ -60,11 +60,12 @@ jobs:
             --tag ${{ secrets.DOCKER_USERNAME }}/community-backend:latest \
             --tag ${{ secrets.DOCKER_USERNAME }}/community-backend:${{ github.sha }} \
             .
-            
+
       - name: Push backend Docker image
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/community-backend:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/community-backend:${{ github.sha }}
+
   deploy:
     needs: build-and-push-image
     runs-on: ubuntu-latest
@@ -77,16 +78,93 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -T 10 -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Deploy to EC2
+      - name: Test SSH connection
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
           ssh \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o StrictHostKeyChecking=accept-new \
             -i ~/.ssh/deploy_key \
-            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" << 'EOF'
+            "$SERVER_USER@$SERVER_HOST" \
+            "echo SSH connection successful"
+
+      - name: Deploy backend with Blue/Green
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o StrictHostKeyChecking=accept-new \
+            -i ~/.ssh/deploy_key \
+            "$SERVER_USER@$SERVER_HOST" << 'EOF'
               set -e
-              cd /home/ubuntu/community-docker/current
-              docker compose pull
-              docker compose up -d --remove-orphans
+
+              cd /home/ubuntu/backend-bluegreen
+
+              if docker ps --format '{{.Names}}' \
+                | grep -qx 'community-backend-blue'; then
+                TARGET=green
+                STOP=community-backend-blue
+              elif docker ps --format '{{.Names}}' \
+                | grep -qx 'community-backend-green'; then
+                TARGET=blue
+                STOP=community-backend-green
+              else
+                TARGET=blue
+                STOP=none
+              fi
+
+              TARGET_SERVICE="community-backend-$TARGET"
+
+              echo "Deploying backend to $TARGET"
+
+              docker compose pull "$TARGET_SERVICE"
+              docker compose up -d "$TARGET_SERVICE"
+
+              HEALTH_CHECK_PASSED=false
+
+              for i in $(seq 1 15); do
+                sleep 3
+
+                if docker exec "$TARGET_SERVICE" \
+                  curl -fsS http://localhost:8080/health; then
+                  HEALTH_CHECK_PASSED=true
+                  echo "Backend health check passed"
+                  break
+                fi
+
+                echo "Health check attempt $i failed"
+              done
+
+              if [ "$HEALTH_CHECK_PASSED" != "true" ]; then
+                echo "Backend health check failed. Rolling back..."
+
+                docker compose stop "$TARGET_SERVICE"
+
+                if [ "$STOP" != "none" ]; then
+                  docker compose up -d "$STOP"
+                fi
+
+                exit 1
+              fi
+
+              echo "Switching backend Nginx to $TARGET"
+
+              sed -i -E \
+                "s/community-backend-(blue|green)/community-backend-$TARGET/g" \
+                nginx.conf
+
+              docker compose up -d --force-recreate backend-nginx
+
+              if [ "$STOP" != "none" ]; then
+                docker stop "$STOP" || true
+              fi
+
               docker compose ps
           EOF
