@@ -65,3 +65,28 @@ jobs:
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/community-backend:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/community-backend:${{ github.sha }}
+  deploy:
+    needs: build-and-push-image
+    runs-on: ubuntu-latest
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        run: |
+          ssh \
+            -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" << 'EOF'
+              set -e
+              cd /home/ubuntu/community-docker/current
+              docker compose pull
+              docker compose up -d --remove-orphans
+              docker compose ps
+          EOF
