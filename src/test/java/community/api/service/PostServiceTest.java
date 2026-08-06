@@ -82,19 +82,34 @@ class PostServiceTest {
                 Category.BACKEND
         );
 
-        when(postRepository.findByIdAndDeletedAtIsNull(1L))
+        when(postRepository
+                .findByIdAndDeletedAtIsNull(1L))
                 .thenReturn(Optional.of(post));
 
-        ForbiddenException exception = assertThrows(
-                ForbiddenException.class,
-                () -> postService.updatePost(2L, 1L, request)
-        );
+        ForbiddenException exception =
+                assertThrows(
+                        ForbiddenException.class,
+                        () -> postService.updatePost(
+                                2L,
+                                1L,
+                                request
+                        )
+                );
 
-        assertEquals("forbidden_error", exception.getCode());
+        assertEquals(
+                "forbidden_error",
+                exception.getCode()
+        );
         assertEquals("제목", post.getTitle());
         assertEquals("내용", post.getContent());
-        assertEquals("image.png", post.getContentImage());
-        assertEquals(Category.BACKEND, post.getCategory());
+        assertEquals(
+                "image.png",
+                post.getContentImage()
+        );
+        assertEquals(
+                Category.BACKEND,
+                post.getCategory()
+        );
 
         verify(postTagRepository, never())
                 .deleteAllByPost_Id(anyLong());
@@ -109,7 +124,8 @@ class PostServiceTest {
         User owner = user(userId);
         Post post = post(postId, owner);
 
-        when(postRepository.findByIdAndDeletedAtIsNull(postId))
+        when(postRepository
+                .findByIdAndDeletedAtIsNull(postId))
                 .thenReturn(Optional.of(post));
 
         assertNull(post.getDeletedAt());
@@ -137,18 +153,27 @@ class PostServiceTest {
         when(postRepository.increaseViewCount(postId))
                 .thenReturn(0);
 
-        NotFoundException exception = assertThrows(
-                NotFoundException.class,
-                () -> postService.getPost(userId, postId)
-        );
+        NotFoundException exception =
+                assertThrows(
+                        NotFoundException.class,
+                        () -> postService.getPost(
+                                userId,
+                                postId
+                        )
+                );
 
-        assertEquals("post_not_found", exception.getCode());
+        assertEquals(
+                "post_not_found",
+                exception.getCode()
+        );
 
         verify(postRepository)
                 .increaseViewCount(postId);
 
         verify(postRepository, never())
-                .findByIdAndDeletedAtIsNull(anyLong());
+                .findByIdAndDeletedAtIsNull(
+                        anyLong()
+                );
     }
 
     @Test
@@ -157,35 +182,49 @@ class PostServiceTest {
         Long userId = 1L;
         Long postId = 10L;
 
-        PostSearchDto search = new PostSearchDto();
+        PostSearchDto search =
+                new PostSearchDto();
 
         User owner = user(userId);
-        Post activePost = post(postId, owner);
+        Post activePost =
+                post(postId, owner);
 
         when(postRepository.searchPosts(search))
                 .thenReturn(List.of(activePost));
 
-        when(likeRepository.countByPostIds(List.of(postId)))
-                .thenReturn(List.of());
+        when(likeRepository.countByPostIds(
+                List.of(postId)
+        )).thenReturn(List.of());
 
-        when(commentRepository.countByPostIds(List.of(postId)))
-                .thenReturn(List.of());
+        when(commentRepository.countByPostIds(
+                List.of(postId)
+        )).thenReturn(List.of());
 
-        when(likeRepository.existsByPost_IdAndUser_Id(
-                postId,
-                userId
-        )).thenReturn(false);
+        when(likeRepository.findLikedPostIds(
+                userId,
+                List.of(postId)
+        )).thenReturn(List.of());
 
-        when(postTagRepository.findAllByPost_Id(postId))
+        when(postTagRepository
+                .findAllWithTagsByPostIds(
+                        List.of(postId)
+                ))
                 .thenReturn(List.of());
 
         List<PostResponseDto> result =
-                postService.getPosts(userId, search);
+                postService.getPosts(
+                        userId,
+                        search
+                );
 
         assertEquals(1, result.size());
         assertEquals(
                 activePost.getId(),
                 result.get(0).getPostId()
+        );
+        assertEquals(
+                false,
+                result.get(0).getIsLiked()
         );
 
         verify(postRepository)
@@ -204,7 +243,8 @@ class PostServiceTest {
         Long userId = 1L;
         Long postId = 10L;
 
-        PostSearchDto search = new PostSearchDto();
+        PostSearchDto search =
+                new PostSearchDto();
 
         User owner = user(userId);
         Post post = post(postId, owner);
@@ -221,22 +261,32 @@ class PostServiceTest {
         when(postRepository.searchPosts(search))
                 .thenReturn(List.of(post));
 
-        when(likeRepository.countByPostIds(List.of(postId)))
-                .thenReturn(List.of());
+        when(likeRepository.countByPostIds(
+                List.of(postId)
+        )).thenReturn(List.of());
 
-        when(commentRepository.countByPostIds(List.of(postId)))
-                .thenReturn(List.of(commentCount));
+        when(commentRepository.countByPostIds(
+                List.of(postId)
+        )).thenReturn(
+                List.of(commentCount)
+        );
 
-        when(likeRepository.existsByPost_IdAndUser_Id(
-                postId,
-                userId
-        )).thenReturn(false);
+        when(likeRepository.findLikedPostIds(
+                userId,
+                List.of(postId)
+        )).thenReturn(List.of());
 
-        when(postTagRepository.findAllByPost_Id(postId))
+        when(postTagRepository
+                .findAllWithTagsByPostIds(
+                        List.of(postId)
+                ))
                 .thenReturn(List.of());
 
         List<PostResponseDto> result =
-                postService.getPosts(userId, search);
+                postService.getPosts(
+                        userId,
+                        search
+                );
 
         assertEquals(1, result.size());
         assertEquals(
@@ -252,37 +302,87 @@ class PostServiceTest {
                 .searchPosts(search);
 
         verify(commentRepository)
-                .countByPostIds(List.of(postId));
+                .countByPostIds(
+                        List.of(postId)
+                );
     }
 
     @Test
-    @DisplayName("좋아요한 게시글을 최신순으로 조회한다")
+    @DisplayName("Repository의 좋아요 순서를 게시글 응답에서도 유지한다")
     void getLikedPosts_ReturnLatestLikedPosts() {
         Long userId = 1L;
-        User currentUser = user(userId);
 
-        Post newerLikedPost = post(20L, user(2L));
-        Post olderLikedPost = post(10L, user(3L));
+        User currentUser =
+                user(userId);
+
+        Post newerLikedPost =
+                post(20L, user(2L));
+
+        Post olderLikedPost =
+                post(10L, user(3L));
 
         when(likeRepository
-                .findAllByUser_IdAndPost_DeletedAtIsNullOrderByCreatedAtDescIdDesc(userId))
+                .findLikedPosts(userId))
                 .thenReturn(List.of(
-                        new Like(newerLikedPost, currentUser),
-                        new Like(olderLikedPost, currentUser)
+                        new Like(
+                                newerLikedPost,
+                                currentUser
+                        ),
+                        new Like(
+                                olderLikedPost,
+                                currentUser
+                        )
                 ));
 
-        when(likeRepository.existsByPost_IdAndUser_Id(20L, userId)).thenReturn(true);
-        when(likeRepository.existsByPost_IdAndUser_Id(10L, userId)).thenReturn(true);
-        when(postTagRepository.findAllByPost_Id(anyLong())).thenReturn(List.of());
+        when(likeRepository.countByPostIds(
+                List.of(20L, 10L)
+        )).thenReturn(List.of());
 
-        List<PostResponseDto> result = postService.getLikedPosts(userId);
+        when(commentRepository.countByPostIds(
+                List.of(20L, 10L)
+        )).thenReturn(List.of());
 
-        assertEquals(List.of(20L, 10L),
+        when(likeRepository.findLikedPostIds(
+                userId,
+                List.of(20L, 10L)
+        )).thenReturn(
+                List.of(20L, 10L)
+        );
+
+        when(postTagRepository
+                .findAllWithTagsByPostIds(
+                        List.of(20L, 10L)
+                ))
+                .thenReturn(List.of());
+
+        List<PostResponseDto> result =
+                postService.getLikedPosts(userId);
+
+        assertEquals(
+                List.of(20L, 10L),
                 result.stream()
                         .map(PostResponseDto::getPostId)
-                        .toList());
-        assertEquals(true, result.get(0).getIsLiked());
-        assertEquals(true, result.get(1).getIsLiked());
+                        .toList()
+        );
+
+        assertEquals(
+                true,
+                result.get(0).getIsLiked()
+        );
+
+        assertEquals(
+                true,
+                result.get(1).getIsLiked()
+        );
+
+        verify(likeRepository)
+                .findLikedPosts(userId);
+
+        verify(likeRepository)
+                .findLikedPostIds(
+                        userId,
+                        List.of(20L, 10L)
+                );
     }
 
     private PostRequestDto postRequest(
@@ -291,28 +391,33 @@ class PostServiceTest {
             String contentImage,
             Category category
     ) {
-        PostRequestDto request = new PostRequestDto();
+        PostRequestDto request =
+                new PostRequestDto();
 
         ReflectionTestUtils.setField(
                 request,
                 "title",
                 title
         );
+
         ReflectionTestUtils.setField(
                 request,
                 "content",
                 content
         );
+
         ReflectionTestUtils.setField(
                 request,
                 "contentImage",
                 contentImage
         );
+
         ReflectionTestUtils.setField(
                 request,
                 "category",
                 category
         );
+
         ReflectionTestUtils.setField(
                 request,
                 "tags",
@@ -330,12 +435,19 @@ class PostServiceTest {
                 "profile1.png"
         );
 
-        ReflectionTestUtils.setField(user, "id", id);
+        ReflectionTestUtils.setField(
+                user,
+                "id",
+                id
+        );
 
         return user;
     }
 
-    private Post post(Long id, User owner) {
+    private Post post(
+            Long id,
+            User owner
+    ) {
         Post post = new Post(
                 owner,
                 "제목",
@@ -344,7 +456,11 @@ class PostServiceTest {
                 Category.BACKEND
         );
 
-        ReflectionTestUtils.setField(post, "id", id);
+        ReflectionTestUtils.setField(
+                post,
+                "id",
+                id
+        );
 
         return post;
     }
