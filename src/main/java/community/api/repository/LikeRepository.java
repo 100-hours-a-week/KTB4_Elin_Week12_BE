@@ -14,6 +14,10 @@ public interface LikeRepository extends JpaRepository<Like, Long> {
 
     void deleteByPost_IdAndUser_Id(Long postId, Long userId);
 
+    List<Like> findAllByUser_IdAndPost_DeletedAtIsNullOrderByCreatedAtDescIdDesc(
+            Long userId
+    );
+
     @Query(value = """
         select
             post_id as postId,

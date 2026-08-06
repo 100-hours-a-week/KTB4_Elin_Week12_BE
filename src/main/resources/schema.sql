@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS likes (
                        like_id	BIGINT NOT NULL AUTO_INCREMENT,
                        user_id	BIGINT	NOT NULL,
                        post_id	BIGINT	NOT NULL,
+                       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                        PRIMARY KEY(like_id),
                        FOREIGN KEY(user_id) REFERENCES users(user_id),
                        FOREIGN KEY(post_id) REFERENCES posts(post_id),

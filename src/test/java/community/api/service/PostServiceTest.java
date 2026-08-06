@@ -4,6 +4,7 @@ import community.api.dto.PostRequestDto;
 import community.api.dto.PostResponseDto;
 import community.api.dto.PostSearchDto;
 import community.api.entity.Category;
+import community.api.entity.Like;
 import community.api.entity.Post;
 import community.api.entity.User;
 import community.api.exception.ForbiddenException;
@@ -252,6 +253,36 @@ class PostServiceTest {
 
         verify(commentRepository)
                 .countByPostIds(List.of(postId));
+    }
+
+    @Test
+    @DisplayName("좋아요한 게시글을 최신순으로 조회한다")
+    void getLikedPosts_ReturnLatestLikedPosts() {
+        Long userId = 1L;
+        User currentUser = user(userId);
+
+        Post newerLikedPost = post(20L, user(2L));
+        Post olderLikedPost = post(10L, user(3L));
+
+        when(likeRepository
+                .findAllByUser_IdAndPost_DeletedAtIsNullOrderByCreatedAtDescIdDesc(userId))
+                .thenReturn(List.of(
+                        new Like(newerLikedPost, currentUser),
+                        new Like(olderLikedPost, currentUser)
+                ));
+
+        when(likeRepository.existsByPost_IdAndUser_Id(20L, userId)).thenReturn(true);
+        when(likeRepository.existsByPost_IdAndUser_Id(10L, userId)).thenReturn(true);
+        when(postTagRepository.findAllByPost_Id(anyLong())).thenReturn(List.of());
+
+        List<PostResponseDto> result = postService.getLikedPosts(userId);
+
+        assertEquals(List.of(20L, 10L),
+                result.stream()
+                        .map(PostResponseDto::getPostId)
+                        .toList());
+        assertEquals(true, result.get(0).getIsLiked());
+        assertEquals(true, result.get(1).getIsLiked());
     }
 
     private PostRequestDto postRequest(

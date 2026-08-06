@@ -44,6 +44,17 @@ public class PostController {
         );
     }
 
+    @GetMapping("/liked")
+    public ResponseEntity<ApiResponse<List<PostResponseDto>>> getLikedPosts(
+            @AuthenticationPrincipal Long userId
+    ) {
+        List<PostResponseDto> response =
+                postService.getLikedPosts(userId);
+        return ResponseEntity.ok(
+                ApiResponse.of("liked_post_list_success", response)
+        );
+    }
+
     @GetMapping("/{postId}")
     public ResponseEntity<ApiResponse<PostResponseDto>> getPost(
             @AuthenticationPrincipal Long userId,

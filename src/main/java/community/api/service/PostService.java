@@ -114,6 +114,20 @@ public class PostService {
                 })
                 .toList();
     }
+
+    public List<PostResponseDto> getLikedPosts(Long userId) {
+        if (userId == null) {
+            throw new UnauthorizedException("unauthorized_error");
+        }
+
+        return likeRepository
+                .findAllByUser_IdAndPost_DeletedAtIsNullOrderByCreatedAtDescIdDesc(userId)
+                .stream()
+                .map(Like::getPost)
+                .map(post -> toResponseDto(post, userId))
+                .toList();
+    }
+
     private List<String> getTagNames(Long postId) {
         return postTagRepository.findAllByPost_Id(postId)
                 .stream()
