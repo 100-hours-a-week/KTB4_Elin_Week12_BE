@@ -44,7 +44,7 @@ public class HealthController {
                             "database", "DOWN",
                             "timestamp", Instant.now().toString()
                     )
-            );
+            ); 
         }
     }
 }
