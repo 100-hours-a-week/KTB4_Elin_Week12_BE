@@ -12,6 +12,9 @@ import community.api.entity.PostSort;
 import community.api.entity.QLike;
 import community.api.entity.QPostTag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
@@ -29,9 +32,14 @@ public class PostRepositoryCustomImpl
     private final JPAQueryFactory queryFactory;
 
     @Override
-    public List<Post> searchPosts(PostSearchDto search) {
+    public Page<Post> searchPosts(
+            PostSearchDto search,
+            Pageable pageable
+    ) {
         PostSearchDto condition =
-                search == null ? new PostSearchDto() : search;
+                search == null
+                        ? new PostSearchDto()
+                        : search;
 
         JPAQuery<Post> query = queryFactory
                 .selectFrom(post)
@@ -42,14 +50,30 @@ public class PostRepositoryCustomImpl
                         tagContainsAny(condition.getTags())
                 );
 
+        Long total = queryFactory
+                .select(post.id.count())
+                .from(post)
+                .where(
+                        post.deletedAt.isNull(),
+                        keywordContains(condition.getKeyword()),
+                        categoryEq(condition.getCategory()),
+                        tagContainsAny(condition.getTags())
+                )
+                .fetchOne();
+
+        long totalElements =
+                total == null ? 0L : total;
+
         PostSort sort = condition.getSort() == null
                 ? PostSort.LATEST
                 : condition.getSort();
 
+        List<Post> content;
+
         if (sort == PostSort.LIKE_COUNT) {
             QLike postLike = QLike.like;
 
-            return query
+            content = query
                     .leftJoin(postLike)
                     .on(postLike.post.eq(post))
                     .groupBy(post)
@@ -57,15 +81,25 @@ public class PostRepositoryCustomImpl
                             postLike.id.count().desc(),
                             post.id.desc()
                     )
+                    .offset(pageable.getOffset())
+                    .limit(pageable.getPageSize())
+                    .fetch();
+        } else {
+            content = query
+                    .orderBy(
+                            orderBy(sort),
+                            post.id.desc()
+                    )
+                    .offset(pageable.getOffset())
+                    .limit(pageable.getPageSize())
                     .fetch();
         }
 
-        return query
-                .orderBy(
-                        orderBy(sort),
-                        post.id.desc()
-                )
-                .fetch();
+        return new PageImpl<>(
+                content,
+                pageable,
+                totalElements
+        );
     }
 
     private BooleanExpression keywordContains(String keyword) {

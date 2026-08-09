@@ -1,5 +1,6 @@
 package community.api.controller;
 
+import community.api.dto.PageResponseDto;
 import community.api.dto.PostRequestDto;
 import community.api.dto.PostResponseDto;
 import community.api.dto.PostSearchDto;
@@ -7,6 +8,8 @@ import community.api.response.ApiResponse;
 import community.api.service.PostService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,14 +36,23 @@ public class PostController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<PostResponseDto>>> getPosts(
+    public ResponseEntity<ApiResponse<PageResponseDto<PostResponseDto>>> getPosts(
             @AuthenticationPrincipal Long userId,
-            @Valid @ModelAttribute PostSearchDto search
+            @Valid @ModelAttribute PostSearchDto search,
+            @PageableDefault(size = 10) Pageable pageable
     ) {
-        List<PostResponseDto> response = postService.getPosts(userId, search);
+        PageResponseDto<PostResponseDto> response =
+                postService.getPosts(
+                        userId,
+                        search,
+                        pageable
+                );
 
         return ResponseEntity.ok(
-                ApiResponse.of("post_list_success", response)
+                ApiResponse.of(
+                        "post_list_success",
+                        response
+                )
         );
     }
 

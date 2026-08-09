@@ -1,5 +1,6 @@
 package community.api.service;
 
+import community.api.dto.PageResponseDto;
 import community.api.dto.PostRequestDto;
 import community.api.dto.PostResponseDto;
 import community.api.dto.PostSearchDto;
@@ -10,6 +11,9 @@ import community.api.exception.NotFoundException;
 import community.api.exception.UnauthorizedException;
 import community.api.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,9 +73,10 @@ public class PostService {
         return toResponseDto(savedPost, userId);
     }
 
-    public List<PostResponseDto> getPosts(
+    public PageResponseDto<PostResponseDto> getPosts(
             Long userId,
-            PostSearchDto search
+            PostSearchDto search,
+            Pageable pageable
     ) {
         if (userId == null) {
             throw new UnauthorizedException(
@@ -79,10 +84,31 @@ public class PostService {
             );
         }
 
-        List<Post> posts =
-                postRepository.searchPosts(search);
+        Pageable safePageable = PageRequest.of(
+                pageable.getPageNumber(),
+                Math.min(pageable.getPageSize(), 50)
+        );
 
-        return toResponseDtos(posts, userId);
+        Page<Post> postPage =
+                postRepository.searchPosts(
+                        search,
+                        safePageable
+                );
+
+        List<PostResponseDto> content =
+                toResponseDtos(
+                        postPage.getContent(),
+                        userId
+                );
+
+        return new PageResponseDto<>(
+                content,
+                postPage.getNumber(),
+                postPage.getSize(),
+                postPage.getTotalElements(),
+                postPage.getTotalPages(),
+                postPage.hasNext()
+        );
     }
 
     public List<PostResponseDto> getLikedPosts(

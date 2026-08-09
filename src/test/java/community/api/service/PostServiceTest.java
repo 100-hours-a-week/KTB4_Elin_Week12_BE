@@ -1,5 +1,6 @@
 package community.api.service;
 
+import community.api.dto.PageResponseDto;
 import community.api.dto.PostRequestDto;
 import community.api.dto.PostResponseDto;
 import community.api.dto.PostSearchDto;
@@ -22,6 +23,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -177,7 +181,7 @@ class PostServiceTest {
     }
 
     @Test
-    @DisplayName("게시글 목록은 검색 Repository 결과를 반환한다")
+    @DisplayName("게시글 목록은 검색 결과와 페이지 정보를 반환한다")
     void getPosts_ReturnSearchResult() {
         Long userId = 1L;
         Long postId = 10L;
@@ -185,12 +189,23 @@ class PostServiceTest {
         PostSearchDto search =
                 new PostSearchDto();
 
+        Pageable pageable =
+                PageRequest.of(0, 10);
+
         User owner = user(userId);
         Post activePost =
                 post(postId, owner);
 
-        when(postRepository.searchPosts(search))
-                .thenReturn(List.of(activePost));
+        when(postRepository.searchPosts(
+                search,
+                pageable
+        )).thenReturn(
+                new PageImpl<>(
+                        List.of(activePost),
+                        pageable,
+                        1
+                )
+        );
 
         when(likeRepository.countByPostIds(
                 List.of(postId)
@@ -211,24 +226,38 @@ class PostServiceTest {
                 ))
                 .thenReturn(List.of());
 
-        List<PostResponseDto> result =
+        PageResponseDto<PostResponseDto> result =
                 postService.getPosts(
                         userId,
-                        search
+                        search,
+                        pageable
                 );
 
-        assertEquals(1, result.size());
+        assertEquals(1, result.getContent().size());
         assertEquals(
                 activePost.getId(),
-                result.get(0).getPostId()
+                result.getContent()
+                        .get(0)
+                        .getPostId()
         );
         assertEquals(
                 false,
-                result.get(0).getIsLiked()
+                result.getContent()
+                        .get(0)
+                        .getIsLiked()
         );
 
+        assertEquals(0, result.getPage());
+        assertEquals(10, result.getSize());
+        assertEquals(1, result.getTotalElements());
+        assertEquals(1, result.getTotalPages());
+        assertEquals(false, result.isHasNext());
+
         verify(postRepository)
-                .searchPosts(search);
+                .searchPosts(
+                        search,
+                        pageable
+                );
 
         verify(postRepository, never())
                 .findAllByDeletedAtIsNull();
@@ -246,30 +275,31 @@ class PostServiceTest {
         PostSearchDto search =
                 new PostSearchDto();
 
+        Pageable pageable =
+                PageRequest.of(0, 10);
+
         User owner = user(userId);
         Post post = post(postId, owner);
 
         PostCountProjection commentCount =
                 mock(PostCountProjection.class);
 
-        when(commentCount.getPostId())
-                .thenReturn(postId);
+        when(commentCount.getPostId()).thenReturn(postId);
+        when(commentCount.getCountValue()).thenReturn(1L);
 
-        when(commentCount.getCountValue())
-                .thenReturn(1L);
-
-        when(postRepository.searchPosts(search))
-                .thenReturn(List.of(post));
-
-        when(likeRepository.countByPostIds(
-                List.of(postId)
-        )).thenReturn(List.of());
-
-        when(commentRepository.countByPostIds(
-                List.of(postId)
+        when(postRepository.searchPosts(
+                search,
+                pageable
         )).thenReturn(
-                List.of(commentCount)
+                new PageImpl<>(
+                        List.of(post),
+                        pageable,
+                        1
+                )
         );
+
+        when(likeRepository.countByPostIds(List.of(postId))).thenReturn(List.of());
+        when(commentRepository.countByPostIds(List.of(postId))).thenReturn(List.of(commentCount));
 
         when(likeRepository.findLikedPostIds(
                 userId,
@@ -282,24 +312,32 @@ class PostServiceTest {
                 ))
                 .thenReturn(List.of());
 
-        List<PostResponseDto> result =
+        PageResponseDto<PostResponseDto> result =
                 postService.getPosts(
                         userId,
-                        search
+                        search,
+                        pageable
                 );
 
-        assertEquals(1, result.size());
+        assertEquals(1, result.getContent().size());
         assertEquals(
                 postId,
-                result.get(0).getPostId()
+                result.getContent()
+                        .get(0)
+                        .getPostId()
         );
         assertEquals(
                 1,
-                result.get(0).getCommentCount()
+                result.getContent()
+                        .get(0)
+                        .getCommentCount()
         );
 
         verify(postRepository)
-                .searchPosts(search);
+                .searchPosts(
+                        search,
+                        pageable
+                );
 
         verify(commentRepository)
                 .countByPostIds(
