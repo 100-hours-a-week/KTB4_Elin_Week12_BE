@@ -43,6 +43,8 @@ public class PostRepositoryCustomImpl
 
         JPAQuery<Post> query = queryFactory
                 .selectFrom(post)
+                .join(post.user)
+                .fetchJoin()
                 .where(
                         post.deletedAt.isNull(),
                         keywordContains(condition.getKeyword()),
